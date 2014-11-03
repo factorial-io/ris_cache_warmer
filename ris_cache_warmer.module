@@ -1,0 +1,140 @@
+<?php
+
+/**
+ * @file
+ * Intercepts responsive images and check if all variants are available. If not, add them to a queue for later processing.
+ */
+
+
+/**
+ * Implementation of hook_menu().
+ */
+function ris_cache_warmer_menu() {
+  $items = array();
+  $items['admin/content/handle-ris-cache'] = array(
+    'page callback' => 'ris_cache_warmer_handle_queue_json',
+    'access arguments' => array('access content'),
+  );
+
+  return $items;
+}
+
+/**
+ * Implementation of hook_preprocess_responsive_image().
+ */
+function ris_cache_warmer_preprocess_responsive_image($vars) {
+  global $user;
+  if ($user->uid != 0) {
+    $styles = responsive_image_styles_get_base_styles();
+    $style = $vars['style'];
+    if (!isset($styles[$style])) {
+      return;
+    }
+    $style_data = $styles[$style];
+    $file = (array) $vars['file'];
+
+    $keys = array('ls' => 'width', 'po' => 'height');
+    $step = isset($style_data['step_width']) ? $style_data['step_width'] : RESPONSIVE_IMAGE_STYLE_STEPS;
+
+    foreach ($style_data['available_ratios'] as $ratio) {
+      $min_key = 'min_' . $keys[$ratio];
+      $max_key = $keys[$ratio];
+
+      $min = $style_data[$ratio][$min_key];
+      $max = $style_data[$ratio][$max_key];
+      while ($min <= $max) {
+        $preset_name = _responsive_image_styles_get_style_name($style_data, $ratio, $min);
+
+        ris_cache_warmer_add_to_queue($preset_name, $file);
+        $min += $step;
+      }
+    }
+  }
+}
+
+
+/**
+ * Add an url to the cache-warmer-queue.
+ */
+function ris_cache_warmer_add_to_queue($preset_name, $file) {
+
+  $path = image_style_path($preset_name, $file['uri']);
+
+  if (!file_exists($path)) {
+
+    $url = image_style_url($preset_name, $file['uri']);
+    $queue = DrupalQueue::get('ris_cache_warmer');
+
+    $data = array(
+      'url' => $url,
+    );
+    $queue->createItem($data);
+  }
+}
+
+
+/**
+ * Implements hook_cron_queue_info().
+ */
+function ris_cache_warmer_cron_queue_info() {
+  $queues = array();
+  $queues['ris_cache_warmer'] = array(
+    'worker callback' => 'ris_cache_warmer_worker',
+    'time' => 100,
+  );
+
+  return $queues;
+}
+
+
+/**
+ * Worker function which gets the image via a http-request.
+ */
+function ris_cache_warmer_worker($data) {
+
+  $url = $data['url'];
+  dmp($url, 'warming cache for');
+
+  if (module_exists('httprl')) {
+    $options = array(
+      'headers' => array(
+        // Set the Host header to self.
+        'Host' => $_SERVER['HTTP_HOST'],
+      ),
+    );
+    httprl_request($url, $options);
+  }
+  else {
+    drupal_http_request($url, array());
+  }
+}
+
+
+/**
+ * Menu-handler, which will handle one queue-item and return the number or remaining items as json.
+ */
+function ris_cache_warmer_handle_queue_json() {
+  $queue = DrupalQueue::get('ris_cache_warmer');
+  $num_items = $queue->numberOfItems();
+
+  if ($item = $queue->claimItem()) {
+    ris_cache_warmer_worker($item->data);
+    $queue->deleteItem($item);
+    $num_items -= 1;
+  }
+
+  drupal_json_output(array('remaining' => $num_items));
+}
+
+
+/**
+ * Implementation of hook_page_build().
+ *
+ * Add js to page if user is logged in.
+ */
+function ris_cache_warmer_page_build() {
+  global $user;
+  if ($user->uid != 0) {
+    drupal_add_js(drupal_get_path('module', 'ris_cache_warmer') . '/ris_cache_warmer.js', 'file');
+  }
+}

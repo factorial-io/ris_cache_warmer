@@ -48,7 +48,7 @@
 
       $('body:not(.ris-cache-warmer-status-attached)', context).addClass('ris-cache-warmer-status-attached').each(function(ndx, elem) {
         $(this).data('ris-cache-warmer-status', new RisCacheWarmerStatus());
-      }.bind(this));
+      });
     }
   };
 

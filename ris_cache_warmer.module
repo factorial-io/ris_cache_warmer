@@ -93,7 +93,6 @@ function ris_cache_warmer_cron_queue_info() {
 function ris_cache_warmer_worker($data) {
 
   $url = $data['url'];
-  dmp($url, 'warming cache for');
 
   if (module_exists('httprl')) {
     $options = array(

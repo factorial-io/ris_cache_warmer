@@ -23,6 +23,9 @@
       this.setProgress(result.remaining);
       this.checkStatus();
     }
+    else {
+      $('#ris-progress-bar').css('display', 'none');
+    }
   };
 
   RisCacheWarmerStatus.prototype.setProgress = function(remaining) {

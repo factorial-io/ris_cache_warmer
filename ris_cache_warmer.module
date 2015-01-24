@@ -25,30 +25,17 @@ function ris_cache_warmer_menu() {
 function ris_cache_warmer_preprocess_responsive_image($vars) {
   global $user;
   if ($user->uid != 0) {
-    $styles = responsive_image_styles_get_base_styles();
-    $style = $vars['style'];
-    if (!isset($styles[$style])) {
-      return;
-    }
-    $style_data = $styles[$style];
     $file = (array) $vars['file'];
+    $used_style = $vars['style'];
 
-    $keys = array('ls' => 'width', 'po' => 'height');
-    $step = isset($style_data['step_width']) ? $style_data['step_width'] : RESPONSIVE_IMAGE_STYLE_STEPS;
-
-    foreach ($style_data['available_ratios'] as $ratio) {
-      $min_key = 'min_' . $keys[$ratio];
-      $max_key = $keys[$ratio];
-
-      $min = $style_data[$ratio][$min_key];
-      $max = $style_data[$ratio][$max_key];
-      while ($min <= $max) {
-        $preset_name = _responsive_image_styles_get_style_name($style_data, $ratio, $min);
-
+    $callback = function($style_name, $ratio, $s, $size_key, $style) use($used_style, $file) {
+      if ($used_style == $style['name']) {
+        $preset_name = _responsive_image_styles_get_style_name($style, $ratio, $s);
         ris_cache_warmer_add_to_queue($preset_name, $file);
-        $min += $step;
       }
-    }
+    };
+
+    responsive_image_styles_iterate_steps_and_call($callback);
   }
 }
 
@@ -62,14 +49,47 @@ function ris_cache_warmer_add_to_queue($preset_name, $file) {
 
   if (!file_exists($path)) {
 
-    $url = image_style_url($preset_name, $file['uri']);
-    $queue = DrupalQueue::get('ris_cache_warmer');
+    if (!_rb_cache_warmer_check_if_in_queue($preset_name, $file['uri'])) {
+      $queue = DrupalQueue::get('ris_cache_warmer');
 
-    $data = array(
-      'url' => $url,
-    );
-    $queue->createItem($data);
+      $data = array(
+        'uri' => $file['uri'],
+        'preset_name' => $preset_name,
+      );
+      $queue->createItem($data);
+    }
   }
+}
+
+/**
+ * Check if an item is already in the queue.
+ *
+ * @param string $preset_name
+ *   the image-style-preset-name to check
+ * @param string $uri
+ *   the file-uri
+ *
+ * @return bool
+ *   True if already in queue.
+ */
+function _rb_cache_warmer_check_if_in_queue($preset_name, $uri) {
+  static $queue_items = NULL;
+  if (is_null($queue_items)) {
+    $query = db_query('SELECT q.data FROM {queue} q WHERE q.name = :name', array(
+      ':name' => 'ris_cache_warmer')
+    );
+
+    $queue_items = $query->fetchAll();
+  }
+
+  foreach ($queue_items as $row) {
+    $data = unserialize($row->data);
+    if (($data['uri'] == $uri)  && ($data['preset_name'] == $preset_name)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
 }
 
 
@@ -92,7 +112,7 @@ function ris_cache_warmer_cron_queue_info() {
  */
 function ris_cache_warmer_worker($data) {
 
-  $url = $data['url'];
+  $url = image_style_url($data['preset_name'], $data['uri']);
 
   if (module_exists('httprl')) {
     $options = array(

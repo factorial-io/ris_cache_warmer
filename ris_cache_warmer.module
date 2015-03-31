@@ -33,7 +33,7 @@ function ris_cache_warmer_preprocess_responsive_image($vars) {
     $style_data = $styles[$style];
     $file = (array) $vars['file'];
 
-    $keys = array('ls' => 'width', 'po' => 'height');
+    $keys = array('ls' => 'width', 'sq' => 'width', 'po' => 'height');
     $step = isset($style_data['step_width']) ? $style_data['step_width'] : RESPONSIVE_IMAGE_STYLE_STEPS;
 
     foreach ($style_data['available_ratios'] as $ratio) {

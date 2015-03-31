@@ -27,15 +27,17 @@ function ris_cache_warmer_preprocess_responsive_image($vars) {
   if ($user->uid != 0) {
     $file = (array) $vars['file'];
     $used_style = $vars['style'];
+    $names = array();
 
-    $callback = function($style_name, $ratio, $s, $size_key, $style) use($used_style, $file) {
+    $callback = function($style_name, $ratio, $s, $size_key, $style) use($used_style, $file, &$names) {
       if ($used_style == $style['name']) {
         $preset_name = _responsive_image_styles_get_style_name($style, $ratio, $s);
-        ris_cache_warmer_add_to_queue($preset_name, $file);
+        $names[] = $preset_name;
       }
     };
-
     responsive_image_styles_iterate_steps_and_call($callback);
+
+    ris_cache_warmer_add_to_queue($names, $file);
   }
 }
 
@@ -43,54 +45,31 @@ function ris_cache_warmer_preprocess_responsive_image($vars) {
 /**
  * Add an url to the cache-warmer-queue.
  */
-function ris_cache_warmer_add_to_queue($preset_name, $file) {
+function ris_cache_warmer_add_to_queue($preset_names, $file) {
+  if (!is_array($preset_names)) {
+    $preset_names = array($preset_names);
+  }
+  $non_existing = array();
+  foreach ($preset_names as $preset_name) {
+    $path = image_style_path($preset_name, $file['uri']);
 
-  $path = image_style_path($preset_name, $file['uri']);
-
-  if (!file_exists($path)) {
-
-    if (!_rb_cache_warmer_check_if_in_queue($preset_name, $file['uri'])) {
-      $queue = DrupalQueue::get('ris_cache_warmer');
-
-      $data = array(
-        'uri' => $file['uri'],
-        'preset_name' => $preset_name,
-      );
-      $queue->createItem($data);
+    if (!file_exists($path)) {
+      $non_existing[] = $preset_name;
     }
   }
-}
 
-/**
- * Check if an item is already in the queue.
- *
- * @param string $preset_name
- *   the image-style-preset-name to check
- * @param string $uri
- *   the file-uri
- *
- * @return bool
- *   True if already in queue.
- */
-function _rb_cache_warmer_check_if_in_queue($preset_name, $uri) {
-  static $queue_items = NULL;
-  if (is_null($queue_items)) {
-    $query = db_query('SELECT q.data FROM {queue} q WHERE q.name = :name', array(
-      ':name' => 'ris_cache_warmer')
+  $chunks = array_chunk($non_existing, 6);
+  foreach ($chunks as $chunk) {
+    $queue = DrupalQueue::get('ris_cache_warmer');
+
+    $data = array(
+      'uri' => $file['uri'],
+      'preset_names' => $chunk,
     );
-
-    $queue_items = $query->fetchAll();
+    $queue->createItem($data);
   }
-
-  foreach ($queue_items as $row) {
-    $data = unserialize($row->data);
-    if (($data['uri'] == $uri)  && ($data['preset_name'] == $preset_name)) {
-      return TRUE;
-    }
-  }
-
-  return FALSE;
 }
+
 
 
 /**
@@ -111,20 +90,26 @@ function ris_cache_warmer_cron_queue_info() {
  * Worker function which gets the image via a http-request.
  */
 function ris_cache_warmer_worker($data) {
+  $urls = array();
+  foreach ($data['preset_names'] as $preset_name ) {
+    $urls[] = image_style_url($preset_name, $data['uri']);
+  }
 
-  $url = image_style_url($data['preset_name'], $data['uri']);
 
-  if (module_exists('httprl')) {
+  if (0 && module_exists('httprl')) {
     $options = array(
       'headers' => array(
         // Set the Host header to self.
         'Host' => $_SERVER['HTTP_HOST'],
       ),
     );
-    httprl_request($url, $options);
+    httprl_request($urls, $options);
   }
   else {
-    drupal_http_request($url, array());
+    foreach ($urls as $url) {
+      // drush_print($url);
+      drupal_http_request($url, array());
+    }
   }
 }
 

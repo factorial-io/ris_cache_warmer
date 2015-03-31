@@ -19,6 +19,12 @@ function ris_cache_warmer_drush_command() {
  * Implementation of the drush command.
  */
 function drush_ris_cache_warmer() {
+  global $base_url;
+
+  if ($base_url == 'http://default') {
+    drush_print('Please set the base-url');
+    exit(1);
+  }
 
   $item = TRUE;
 
@@ -27,9 +33,10 @@ function drush_ris_cache_warmer() {
   $processed_items = 0;
   while ($item) {
     if ($item = $queue->claimItem()) {
-      drush_print(round(100.0 * $processed_items / $num_items) . '% done. Getting ' . $item->data['preset_name'] . ' / ' . $item->data['uri']);
+      drush_print(round(100.0 * $processed_items / $num_items) . '% done. Getting ' . $item->data['uri']);
       ris_cache_warmer_worker($item->data);
       $queue->deleteItem($item);
+      // $queue->releaseItem($item);
       $processed_items++;
     }
   }

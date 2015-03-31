@@ -27,7 +27,7 @@ function drush_ris_cache_warmer() {
   $processed_items = 0;
   while ($item) {
     if ($item = $queue->claimItem()) {
-      drush_print(round(100.0 * $processed_items / $num_items) . '% done. Getting ' . $item->data['url']);
+      drush_print(round(100.0 * $processed_items / $num_items) . '% done. Getting ' . $item->data['preset_name'] . ' / ' . $item->data['uri']);
       ris_cache_warmer_worker($item->data);
       $queue->deleteItem($item);
       $processed_items++;

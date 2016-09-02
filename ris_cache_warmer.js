@@ -23,6 +23,9 @@
       this.setProgress(result.remaining);
       this.checkStatus();
     }
+    else {
+      $('#ris-progress-bar').css('display', 'none');
+    }
   };
 
   RisCacheWarmerStatus.prototype.setProgress = function(remaining) {
@@ -33,12 +36,13 @@
 
     if(!this.progressVisible) {
       this.progressElem = $('<div id="ris-progress-bar"><span style="background-color: #f00; display: block; width: 0%; height: 100%; position: absolute; left: 0; top: 0;"></span></div>');
-      this.progressElem.css({ position: 'fixed', width: '100%', height: '2px', left: 0, bottom: 0 });
+      this.progressElem.css({ position: 'fixed', width: '100%', height: '4px', left: 0, bottom: 0 });
       $('body').append(this.progressElem);
       this.progressVisible = true;
     }
-    var percent = this.processedItems / this.numItems * 100.0;
+    var percent = Math.max(2, this.processedItems / this.numItems * 100.0);
     this.progressElem.find('span').css('width', percent + "%");
+    this.progressElem.attr('title', Math.round(percent) + "% done, " + remaining + " items remaining");
 
   };
 

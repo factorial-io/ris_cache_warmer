@@ -1,0 +1,9 @@
+<?php
+
+/**
+ * Delete cache warmer queue.
+ */
+function ris_cache_warmer_update_7001() {
+  $queue = DrupalQueue::get('ris_cache_warmer');
+  $queue->deleteQueue();
+}

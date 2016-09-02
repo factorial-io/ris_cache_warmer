@@ -25,30 +25,11 @@ function ris_cache_warmer_menu() {
 function ris_cache_warmer_preprocess_responsive_image($vars) {
   global $user;
   if ($user->uid != 0) {
-    $styles = responsive_image_styles_get_base_styles();
-    $style = $vars['style'];
-    if (!isset($styles[$style])) {
-      return;
-    }
-    $style_data = $styles[$style];
     $file = (array) $vars['file'];
-
-    $keys = array('ls' => 'width', 'po' => 'height');
-    $step = isset($style_data['step_width']) ? $style_data['step_width'] : RESPONSIVE_IMAGE_STYLE_STEPS;
-
-    foreach ($style_data['available_ratios'] as $ratio) {
-      $min_key = 'min_' . $keys[$ratio];
-      $max_key = $keys[$ratio];
-
-      $min = $style_data[$ratio][$min_key];
-      $max = $style_data[$ratio][$max_key];
-      while ($min <= $max) {
-        $preset_name = _responsive_image_styles_get_style_name($style_data, $ratio, $min);
-
-        ris_cache_warmer_add_to_queue($preset_name, $file);
-        $min += $step;
-      }
-    }
+    responsive_image_styles_iterate_steps_and_call(function ($style_name, $ratio, $s, $size_key, $item) use ($file) {
+      $preset_name = _responsive_image_styles_get_style_name($item, $ratio, $s);
+      ris_cache_warmer_add_to_queue($preset_name, $file);
+    });
   }
 }
 
@@ -59,7 +40,6 @@ function ris_cache_warmer_preprocess_responsive_image($vars) {
 function ris_cache_warmer_add_to_queue($preset_name, $file) {
 
   $path = image_style_path($preset_name, $file['uri']);
-
   if (!file_exists($path)) {
 
     $url = image_style_url($preset_name, $file['uri']);
